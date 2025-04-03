@@ -1,0 +1,7 @@
+huggingface_hub[inference]
+python-dotenv
+markdownify
+smolagents[mlx-lm,gradio]
+requests
+duckduckgo_search
+pandas

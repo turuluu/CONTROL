@@ -1,0 +1,36 @@
+.venv/
+.tox/
+
+.env
+
+#### visualstudiocode ####
+.vscode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# Local History for Visual Studio Code
+.history/
+
+# Built Visual Studio Code Extensions
+*.vsix
+.idea/
+**/*.pyc
+**/__pycache__
+dist/
+**/playground.py
+pip-wheel-metadata/
+clima.egg-info/
+.coverage
+*.css
+*.html
+.cache
+**/*.log
+**/*.cfg
+**/*.conf
+.hypothesis
+.DS_Store
+poetry.lock
