@@ -4,3 +4,12 @@
 
 Using local models on ollama and frameworks such as smolagents
 
+#### Create a model with a long context window
+
+    ollama pull gemma3:12b
+    ollama create -f modelfile.gemma3
+
+#### Install dependencies
+
+    uv venv
+    uv pip install -r requirements.txt

@@ -1,0 +1,19 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "duckduckgo-search",
+#     "huggingface-hub[inference]",
+#     "markdownify",
+#     "pandas",
+#     "python-dotenv",
+#     "requests",
+#     "smolagents[litellm]",
+# ]
+# ///
+
+"""
+update dependencies to requirements.txt and then run:
+    uv add --script run.uv -r requirements.txt
+"""
+import main
