@@ -1,3 +1,0 @@
-# deepseek modelfile
-FROM gemma3:12b
-PARAMETER num_ctx 128000

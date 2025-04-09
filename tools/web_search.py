@@ -1,6 +1,7 @@
 from typing import Any, Optional
-from smolagents.tools import Tool
+from smolagents.tools import Tool, tool
 import duckduckgo_search
+
 
 class DuckDuckGoSearchTool(Tool):
     name = "web_search"
@@ -25,3 +26,16 @@ class DuckDuckGoSearchTool(Tool):
             raise Exception("No results found! Try a less restrictive/shorter query.")
         postprocessed_results = [f"[{result['title']}]({result['href']})\n{result['body']}" for result in results]
         return "## Search Results\n\n" + "\n\n".join(postprocessed_results)
+
+
+@tool
+def ddg_search(query: str) -> str:
+    """A tool that searches the we with the given query
+    Args:
+        query: the internet search query
+    """
+    ddg = DuckDuckGoSearchTool()
+    try:
+        return ddg.forward(query)
+    except:
+        return "No search results found"

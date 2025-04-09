@@ -1,6 +1,8 @@
 .venv/
 .tox/
 
+saved_map.png
+
 .env
 
 #### visualstudiocode ####

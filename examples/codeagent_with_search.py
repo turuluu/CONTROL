@@ -4,19 +4,9 @@ import requests
 import pytz
 import yaml
 from tools.final_answer import FinalAnswerTool
+from tools.web_search import ddg_search
 
 
-@tool
-def web_search(query: str) -> str:
-    """A tool that searches the we with the given query
-    Args:
-        query: the internet search query
-    """
-    ddg = DuckDuckGoSearchTool()
-    try:
-        return ddg.forward(query)
-    except:
-        return "No search results found"
 
 # Below is an example of a tool that does nothing. Amaze us with your creativity !
 @tool
@@ -52,11 +42,9 @@ def run(model, prompt):
     with open("prompts.yaml", 'r') as stream:
         prompt_templates = yaml.safe_load(stream)
 
-    print(len(prompt_templates))
-
     agent = CodeAgent(
         model=model,
-        tools=[get_current_time_in_timezone, web_search, final_answer],  ## add your tools here (don't remove final answer)
+        tools=[get_current_time_in_timezone, ddg_search, final_answer],  ## add your tools here (don't remove final answer)
         max_steps=6,
         verbosity_level=1,
         grammar=None,

@@ -5,3 +5,9 @@ smolagents[litellm]
 requests
 duckduckgo_search
 pandas
+langchain-community
+rank_bm25
+plotly
+geopandas
+shapely
+kaleido
