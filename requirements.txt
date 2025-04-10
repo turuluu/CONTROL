@@ -1,13 +1,19 @@
-huggingface_hub[inference]
+# don't really need, but convenient
 python-dotenv
+
+huggingface_hub[inference]
 markdownify
+# litellm for local ollama models
 smolagents[litellm]
 requests
 duckduckgo_search
 pandas
+# langchain examples
 langchain-community
 rank_bm25
 plotly
 geopandas
 shapely
 kaleido
+#llama-indexo
+llama-index-llms-ollama
