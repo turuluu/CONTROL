@@ -24,7 +24,16 @@ pip
 
 Install [ollama](https://ollama.com)
 
+
 #### Create a model with a long context window
+
+**llama-index**
+
+No need as llama-index can pass the num-ctx kwarg at call-time.
+
+**smolagents**
+
+The LiteLLM model in smolagents uses ollama-chat, which does not implement the num-ctx parameter override. Hence, extending the context window is done via a custom model variant.
 
 1. Create modelfile e.g. modelfile.gemma3
     
