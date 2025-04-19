@@ -15,5 +15,7 @@ plotly
 geopandas
 shapely
 kaleido
-#llama-indexo
+#llama-index
 llama-index-llms-ollama
+#rag
+datasets
