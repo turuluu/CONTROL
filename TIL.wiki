@@ -1,0 +1,29 @@
+= TIL =
+
+- datasets package
+  - gotcha: takes source attribute as path
+  - can span multiple parquets with wildcards
+  - splits to train or sth
+- ollama api has explicit tools support for specific models
+  - [[https://ollama.com/blog/tool-support]]
+- smol 
+  - (- ) loops with local gemma3:12b
+    - possibly related to that ollama:gemma3 is not enlisted for tool usage
+  -    memory should be possible using just the kwarg 'reset', but it's not
+       happening
+- llama-index
+  - (++) Was the only one that worked for in the example's case without hiccups
+  - (++) has built-in num-ctx for ollama
+  - (+ ) most straight-forward way to describe tools
+  - (+ ) lets you install integrations/extensions individually
+  - (+ ) correctly assesses (?) if the model can use tools via ollama api
+  - (+ ) works with llama3.2
+  -    memory should be possibe using ctx=Context(alfred) and passing that as
+       kwarg ctx=ctx
+- langgraph
+  - (++) has built-in num-ctx for ollama
+  - (+ ) extensions mostly via langchain
+  - (- ) llama3.2 doesn't quite work with it - none of the small models work
+  -    memory is done basically by copying previous response to messages
+  -    Note: ollama local model support in langchain-ollama
+

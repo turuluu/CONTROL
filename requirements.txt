@@ -4,18 +4,27 @@ python-dotenv
 huggingface_hub[inference]
 markdownify
 # litellm for local ollama models
+## ollama local models
 smolagents[litellm]
 requests
 duckduckgo_search
 pandas
 # langchain examples
+## retrievers
 langchain-community
 rank_bm25
+## ollama local models
+langchain-ollama
 plotly
 geopandas
 shapely
 kaleido
-#llama-index
+#llama-index (every integration is a separate package)
+## ollama local models
 llama-index-llms-ollama
+llama-index-tools-duckduckgo
+llama-index-retrievers-bm25
+# langgraph
+langgraph
 #rag
 datasets

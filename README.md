@@ -1,6 +1,6 @@
 # CONTROL from Get Smart
 
-LLM Agents.
+*Throwaway code for self-learning LLM Agents.*
 
 For those that didn't start with commodore 64, the names are references to an old TV-parody of secret agents: [Get Smart Intro on YT](https://www.youtube.com/watch?v=o2ObCoCm61s)
 
