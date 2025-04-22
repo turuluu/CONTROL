@@ -65,6 +65,7 @@ Configure nix command `build` by creating config file:
 
    # ~/.config/nix/nix.conf
    experimental-features = nix-command flakes
+   sandbox = true
 
 Build the contained plantuml from package:
 
