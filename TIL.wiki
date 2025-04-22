@@ -15,6 +15,9 @@
   - (++) Was the only one that worked for in the example's case without hiccups
   - (++) has built-in num-ctx for ollama
   - (+ ) most straight-forward way to describe tools
+    - Also, no point in repeating name and description, as they are parsed using
+      reflection from the name, signature and docstring
+  - (+ ) Most stars on github, and self-claims to be the most popular
   - (+ ) lets you install integrations/extensions individually
   - (+ ) correctly assesses (?) if the model can use tools via ollama api
   - (+ ) works with llama3.2
