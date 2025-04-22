@@ -54,3 +54,19 @@ Note: The longer the context window, the slower the model gets.
    - On OpenAI the plus subscription is not enough, you have to prepay a sum to be used for the API calls
 - Create a token
 - Paste the token to an `.env` file (use the `.env.in` as a template)
+
+## Plantuml demo (wip)
+
+### Setup nix and build
+
+Install: https://nixos.org/download/
+
+Configure nix command `build` by creating config file:
+
+   # ~/.config/nix/nix.conf
+   experimental-features = nix-command flakes
+
+Build the contained plantuml from package:
+
+   nix build "nixpkgs#plantuml"
+

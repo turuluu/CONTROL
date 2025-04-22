@@ -10,3 +10,4 @@ async def run(model, prompt, reset=True):
 
     response = await alfred.run(prompt)
     print(response)
+
