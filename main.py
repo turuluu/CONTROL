@@ -5,15 +5,14 @@ load_dotenv()
 
 model_types = ['local', 'hf', 'openai']
 
-from examples.codeagent_with_search import run as ca_run
-from examples.langchain import run as lc_run
-from examples.llamaindex_basic import run as li_run
-from examples.llamaindex import run as li2_run
-from examples.tools_llama_index import run as li_tools_example
-from examples.rag_smol import run as rag_run
-from examples.rag_llama_index import run as li_rag_example
-from examples.rag_langgraph import run as lg_rag_example
-from examples.tools_langgraph import run as lg_tools_example
+from examples.demo_codeagent_smol import run as ca_run
+from examples.demo_simple_langchain import run as lc_run
+from examples.demo_simple_llama_index import run as li2_run
+from examples.demo_tools_llama_index import run as li_tools_example
+from examples.demo_rag_smol import run as rag_run
+from examples.demo_rag_llama_index import run as li_rag_example
+from examples.demo_rag_langgraph import run as lg_rag_example
+from examples.demo_tools_langgraph import run as lg_tools_example
 
 # ca_run(hf, 'Who is the president of Burgundy')
 # lc_run(hf, "Find ideas for a luxury superhero-themed party, including entertainment, catering, and decoration options.")
@@ -32,7 +31,11 @@ tools_prompt = 'What\'s the weather like in Paris tonight? Will it be suitable f
 #     change the line 31 of .venv/lib/python3.12/site-packages/langchain_community/utilities/duckduckgo_search.py
 #     from => to
 #     backend: str = "auto" => backend: str = "api"
-lg_tools_example('local', tools_prompt)
+# lg_tools_example('local', tools_prompt)
 
 # from examples import multiagents
 # from examples import vision
+
+from tools.llama_index import puml_to_png
+
+puml_to_png('', '')

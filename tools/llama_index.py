@@ -1,3 +1,4 @@
+from typing import Optional
 from llama_index.tools.duckduckgo import DuckDuckGoSearchToolSpec
 from llama_index.core.tools import FunctionTool
 from pathlib import Path
@@ -24,42 +25,40 @@ def weather_info(location: str) -> str:
 
 weather_info_tool = FunctionTool.from_defaults(weather_info)
 
-nix_bin_path = Path.cwd() / './result/bin'
+nix_bin_path = Path.cwd() / 'result/bin'
 
 
-def puml_to_png(puml_declaration: str, output_path: str, plantuml_path: str = nix_bin_path / '/plantuml'):
+def puml_to_png(puml_declaration: str, output_path: str, plantuml_path: str = nix_bin_path / 'plantuml') -> Optional[
+    str]:
     """
         Generates a PNG image from a UML declaration using PlantUML.
 
-        Parameters:
-        -----------
-        uml_text : str
-            The UML declaration in PlantUML syntax (e.g., "@startuml ... @enduml").
-        output_path : str
-            The desired path for the output PNG file.
-        plantuml_path : str
-            Path to the PlantUML executable (default is './result/bin/plantuml', e.g., from `nix build`).
+        Args:
+            uml_text (str): The UML declaration in PlantUML syntax (e.g., "@startuml ... @enduml").
+            output_path (str): The desired path for the output PNG file.
+            plantuml_path (str): Path to the PlantUML executable (default is './result/bin/plantuml', e.g., from `nix build`).
 
         Returns:
-        --------
-        str
-            The path to the generated PNG file.
+            Optional[str]: The path to the generated PNG file.
 
         Raises:
-        -------
-        subprocess.CalledProcessError
-            If the PlantUML command fails to run.
+            subprocess.CalledProcessError: If the PlantUML command fails to run.
         """
     if not nix_bin_path.exists():
-        print(f"Aborting puml to png conversion, binary path incorrect or missing...{nix_bin_path}")
-        return ''
+        print(f"Aborting puml to png conversion, binary path incorrect or missing: {nix_bin_path}")
+        print('Look for build commands for puml demo in the readme')
+        return
 
-    # Write UML to a temporary file
+    if not puml_declaration:
+        print('puml empty')
+        return
+
+    # Write UML
     with tempfile.NamedTemporaryFile(suffix=".puml", delete=False) as temp_file:
         temp_file.write(puml_declaration.encode("utf-8"))
         temp_file_path = temp_file.name
 
-    # Generate PNG using PlantUML
+    # Generate PNG
     subprocess.run([plantuml_path, "-tpng", temp_file_path], check=True)
 
     # Write to final destination
