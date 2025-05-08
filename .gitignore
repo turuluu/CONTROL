@@ -1,6 +1,12 @@
 result
 resources/
 
+data/**/*.mp3
+data/**/*.wav
+data/**/*.xls*
+data/**/*.png
+
+
 .venv/
 .tox/
 
