@@ -2,12 +2,58 @@ from typing import Optional
 from llama_index.tools.duckduckgo import DuckDuckGoSearchToolSpec
 from llama_index.core.tools import FunctionTool
 from pathlib import Path
+
+from persistent_cache.decorators import persistent_cache
+import mediawiki
+
 import random
 import tempfile
 import subprocess
 
+wiki = mediawiki.MediaWiki()
+
+
+@persistent_cache(weeks=1)
+def _wikipedia_search(search_terms: str) -> str:
+    wiki_responses = wiki.search(search_terms)
+    print(f'(queried) wiki responses n: {len(wiki_responses)}')
+    return wiki_responses
+
+
+def wikipedia_search(search_terms: str) -> str:
+    """Searches wikipedia for encyclopedic information about topics"""
+    response = ''
+    for wiki_resp in _wikipedia_search(search_terms)[:1]:
+        try:
+            response += wiki.page(wiki_resp).wikitext
+        except mediawiki.exceptions.DisambiguationError:
+            pass
+    return response
+
+
+wikipedia_tool = FunctionTool.from_defaults(wikipedia_search)
+
+def ddg_search(query: str) -> str:
+    """
+    Make a query to DuckDuckGo search to receive a full search results.
+
+    Args:
+        query (str): The query to be passed to DuckDuckGo.
+    """
+    from duckduckgo_search import DDGS
+
+    params = {
+        "keywords": query,
+        "region": 'wt-wt',
+        "max_results": 5,
+    }
+
+    with DDGS() as ddg:
+        return list(ddg.text(**params))
+# web search
 ddg_tool_spec = DuckDuckGoSearchToolSpec()
-ddg_search = FunctionTool.from_defaults(ddg_tool_spec.duckduckgo_full_search)
+web_search_tool = FunctionTool.from_defaults(ddg_tool_spec.duckduckgo_full_search)
+ddg_search = web_search_tool
 
 
 def weather_info(location: str) -> str:

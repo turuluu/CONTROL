@@ -1,4 +1,48 @@
 import requests
+import io
+from datetime import datetime
+
+class Timed(io.StringIO):
+    """Typed matching helper for Tee - see Tee below for refernce"""
+    def now(self):
+        return datetime.now().strftime('%H%M%S.%f')
+
+
+class Tee(io.TextIOBase):
+    """Save print outs in buffers
+
+    Example:
+        buffer_out = Timed()
+        buffer_err = Timed()
+        import sys
+        tee_out = Tee(buffer_out, sys.stdout)
+        tee_err = Tee(buffer_err, sys.stderr)
+
+        # Use redirect_stdout to install it temporarily
+        from contextlib import redirect_stdout, redirect_stderr
+        with redirect_stdout(tee_out), redirect_stderr(tee_err):
+            print("This will appear on-screen and saved in buffer")
+            print('This is an error', file=sys.stderr)
+            print("…and both are captured")
+
+        lines = buffer_out.getvalue().splitlines() + buffer_err.getvalue().splitlines()
+        lines.sort()
+        for line in lines:
+            print(line)
+
+    """
+    def __init__(self, *streams):
+        self.streams = streams
+    def write(self, data):
+        for s in self.streams:
+            if type(s) == Timed and data != '\n':
+                s.write(f'{s.now()}| {data}')
+            else:
+                s.write(data)
+    def flush(self):
+        for s in self.streams:
+            s.flush()
+
 
 def download_file(url, save_path=None):
     """

@@ -20,11 +20,15 @@ geopandas
 shapely
 kaleido
 #llama-index (every integration is a separate package)
-## ollama local models
-llama-index-llms-ollama
+llama-index-llms-ollama # ollama local model
+llama-index-llms-openai # openai api
 llama-index-tools-duckduckgo
 llama-index-retrievers-bm25
 # langgraph
 langgraph
 #rag
 datasets
+#gaia benchmark demo
+pymediawiki #wikipedia searches
+# trying out things
+persistent-cache-decorator
