@@ -1,6 +1,7 @@
 from typing import Optional
 from llama_index.tools.duckduckgo import DuckDuckGoSearchToolSpec
 from llama_index.core.tools import FunctionTool
+import llama_index.core
 from pathlib import Path
 
 from persistent_cache.decorators import persistent_cache
@@ -9,21 +10,22 @@ import mediawiki
 import random
 import tempfile
 import subprocess
+import logging
+import sys
+
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 wiki = mediawiki.MediaWiki()
 
+llama_index.core.set_global_handler("simple")
 
-@persistent_cache(weeks=1)
-def _wikipedia_search(search_terms: str) -> str:
-    wiki_responses = wiki.search(search_terms)
-    print(f'(queried) wiki responses n: {len(wiki_responses)}')
-    return wiki_responses
-
-
+@persistent_cache(hours=1)
 def wikipedia_search(search_terms: str) -> str:
     """Searches wikipedia for encyclopedic information about topics"""
+    print(f'[tool] Searching wikipedia {search_terms=}')
     response = ''
-    for wiki_resp in _wikipedia_search(search_terms)[:1]:
+    for wiki_resp in wiki.search(search_terms)[:1]:
         try:
             response += wiki.page(wiki_resp).wikitext
         except mediawiki.exceptions.DisambiguationError:
@@ -33,6 +35,8 @@ def wikipedia_search(search_terms: str) -> str:
 
 wikipedia_tool = FunctionTool.from_defaults(wikipedia_search)
 
+
+@persistent_cache(hours=1)
 def ddg_search(query: str) -> str:
     """
     Make a query to DuckDuckGo search to receive a full search results.
@@ -50,9 +54,11 @@ def ddg_search(query: str) -> str:
 
     with DDGS() as ddg:
         return list(ddg.text(**params))
+
+
 # web search
 ddg_tool_spec = DuckDuckGoSearchToolSpec()
-web_search_tool = FunctionTool.from_defaults(ddg_tool_spec.duckduckgo_full_search)
+web_search_tool = FunctionTool.from_defaults(ddg_search)
 ddg_search = web_search_tool
 
 

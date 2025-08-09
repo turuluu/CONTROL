@@ -1,4 +1,5 @@
 """Throwaway code for figuring out gaia-benchmark"""
+from datetime import datetime
 import os
 import requests
 import pandas as pd
@@ -18,14 +19,15 @@ import asyncio
 from contextlib import redirect_stderr, redirect_stdout
 from tools.utlz import Tee, Timed
 
+model_key = 'openai'
 
 class BasicAgent:
     def __init__(self):
         print("BasicAgent initialized.")
 
     def __call__(self, question: str) -> str:
-        print(f"Agent received question (first 50 chars): {question[:50]}...")
-        return asyncio.run(run_agent(models['local'], question))
+        print(f"[{model_key}] Agent received question (first 50 chars): {question[:50]}...")
+        return asyncio.run(run_agent(models[model_key], question))
 
 
 with open('prompts/gaia_benchmark.txt', 'r', encoding='UTF-8') as prompt_file:
@@ -34,13 +36,25 @@ with open('prompts/gaia_benchmark.txt', 'r', encoding='UTF-8') as prompt_file:
 
 async def run_agent(model, prompt, reset=True):
     agent = AgentWorkflow.from_tools_or_functions(
-        [web_search_tool, wikipedia_tool],
+        [wikipedia_tool],
         llm=model,
-        system_prompt=gaia_prompt
+        system_prompt=gaia_prompt,
+        verbose=True
     )
 
     response = await agent.run(prompt)
     print(f'{response=}')
+    try:
+        blocks = response.response.get('blocks')
+        if blocks:
+            print('-' * 80)
+            for block in blocks:
+                if 'text' in block:
+                    print(block.get('text'))
+            print('-' * 80)
+    except:
+        pass
+
     return str(response).split('FINAL ANSWER: ')[1]
 
 
@@ -60,10 +74,10 @@ class GaiaTask(BaseModel):
 def get_questions() -> List[GaiaTask]:
     api_url = DEFAULT_API_URL
     questions_url = f"{api_url}/questions"
-    print(f"Fetching questions from: {questions_url}")
     try:
         with open('q.json') as f:
             questions_data = json.load(f)
+            print('Fetched questions from "cache"')
     except FileNotFoundError:
         response = requests.get(questions_url, timeout=15)
         response.raise_for_status()
@@ -119,7 +133,8 @@ def run_and_submit_all(profile=None):
     results_log = []
     answers_payload = []
     print(f"Running agent on {len(questions_data)} questions...")
-    for item in questions_data[:1]:
+
+    for item in questions_data:
         task_id = item.task_id
         question_text = item.question
         if not task_id or question_text is None:
@@ -149,7 +164,8 @@ if __name__ == "__main__":
     tee_err = Tee(buffer_err, sys.stderr)
 
     with redirect_stdout(tee_out), redirect_stderr(tee_err):
-        print("\n" + "-" * 30 + " Starting " + "-" * 30)
+        print()
+        print("-" * 30 + " Starting " + "-" * 30)
         run_and_submit_all()
 
     lines = buffer_out.getvalue().splitlines() + buffer_err.getvalue().splitlines()
