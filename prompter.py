@@ -305,7 +305,7 @@ class PromptPanel(Static):
     def replace_output(self, text: str) -> None:
         self.output_log.clear()
         if text:
-            self.output_log.write(text, scroll_end=True)
+            self.output_log.write(text)
 
 class SidePanel(VerticalScroll):
     """Shows scores and status for all prompts."""
@@ -314,6 +314,7 @@ class SidePanel(VerticalScroll):
         super().__init__()
         self.state = state
         self.labels: Dict[int, Label] = {}
+        self.status_log: Optional[RichLog] = None
 
     def compose(self) -> ComposeResult:
         yield Label("Prompts & Scores", classes="side-title")
@@ -322,6 +323,9 @@ class SidePanel(VerticalScroll):
             self.labels[s.slot_id] = lbl
             yield lbl
         yield Label("\nHints: \n• '1e/2e/3e' edit \n• '1d/2d/3d' drop \n• '1g/2g/3g' alt \n• r run \n• n new \n• m globals \n• s save \n• o open \n• q quit", classes="hints")
+        yield Label("\nStatus", classes="side-title")
+        self.status_log = RichLog(id="status-log")
+        yield self.status_log
 
     def update_panel(self) -> None:
 
@@ -332,6 +336,10 @@ class SidePanel(VerticalScroll):
             if not s.empty and not s.dropped:
                 text += f"  born@{s.born_stage}  survived={s.has_survived}"
             self.labels[s.slot_id].update(text)
+
+    def post_status(self, msg: str) -> None:
+        if self.status_log is not None:
+            self.status_log.write(msg)
 
 class ModalInput(App):
     """Simple modal prompt editor—spawned as a sub-App (blocking)."""
@@ -404,6 +412,7 @@ class PromptEvalApp(App):
     #header { column-span: 3; border: tall $accent; }
     #col1, #col2, #col3 { border: round $primary; }
     RichLog { height: 1fr; }
+    #status-log { height: 10; }  /* optional: give status a compact fixed height */
     """
 
     BINDINGS = [
@@ -424,7 +433,7 @@ class PromptEvalApp(App):
         self.combo_buffer: Optional[int] = None
         self.combo_ts: float = 0.0
         self.client: Optional[httpx.AsyncClient] = None
-        self._running = False
+        self.run_lock = asyncio.Lock()
 
     def _new_run_state(self) -> RunState:
         return RunState(
@@ -476,6 +485,10 @@ class PromptEvalApp(App):
         key = event.key
         now = time.time()
 
+        if key == "r":
+            await self.action_run_all()
+            return
+
         if key in ("1", "2", "3"):
             self.combo_buffer = int(key)
             self.combo_ts = now
@@ -494,21 +507,17 @@ class PromptEvalApp(App):
             if key == "n":
                 self.run_worker(self._add_new_in_slot(slot), exclusive=True)
                 return
-            if key == "r":
-                await self.action_run_all()
-                return
         # fall through to normal single-key bindings
 
     # -------------- Actions
 
     async def action_run_all(self) -> None:
-        if self._running:
+        if self.run_lock.locked():
             await self._status("Already running…")
             return
-        self._running = True
-        try:
+        async with self.run_lock:
             # Sequential runs across active, non-empty slots (1->3)
-            await self._status("Starting run…")
+            await self._status(f"Starting run… model={self.state.settings.model}")
             for i in range(1, 4):
                 slot = self.state.slots[i-1]
                 if slot.empty or slot.dropped:
@@ -517,8 +526,6 @@ class PromptEvalApp(App):
                 await self._status(f"Running slot {i}…")
                 await self._run_one(i)
             await self._status("Run complete.")
-        finally:
-            self._running = False
 
     async def action_add_new(self) -> None:
         # find first empty slot
@@ -650,10 +657,18 @@ class PromptEvalApp(App):
         return await self.push_screen_wait(screen)
 
     async def _status(self, msg: str) -> None:
-        # Quick toast via footer title hack
-        self.sub_title = msg
-        await asyncio.sleep(1.4)
-        self.sub_title = ""
+        """Write status to the side panel and to a log file."""
+        # On-screen
+        try:
+            self.side_panel.post_status(msg)
+        except Exception:
+            pass
+        # File log
+        try:
+            with (SAVE_DIR / "app.log").open("a", encoding="utf-8") as fh:
+                fh.write(msg + "\n")
+        except Exception:
+            pass
 
     async def _edit_prompt(self, slot_id: int) -> None:
         slot = self.state.slots[slot_id-1]
@@ -704,12 +719,13 @@ class PromptEvalApp(App):
             return
         base_text = slot.last_dropped_text or ""
         if not base_text.strip():
-            await self._status("No dropped prompt text to rewrite.")
+            await self._status(f"Slot {slot_id} has no dropped prompt to rewrite. Drop here first with '{slot_id}d'.")
             return
         try:
+            await self._status(f"Generating alternative with {self.state.gen_settings.model} …")
             alt = await self._rewrite_prompt(base_text)
         except Exception as e:
-            await self._status(f"Generator failed: {e}")
+            await self._status(f"Generate alternative failed: {e!s}")
             return
         # Insert new prompt
         slot.text = alt.strip()
@@ -789,8 +805,11 @@ class PromptEvalApp(App):
                     if obj.get("done"):
                         # Final stats could be used if desired
                         break
+        except httpx.HTTPError as e:
+            await self._status(f"Ollama HTTP error: {e!s}")
+            raise
         except Exception as e:
-            await self._status(f"Ollama error: {e!s}")
+            await self._status(f"Ollama stream error: {e!s}")
             raise
 
     async def _rewrite_prompt(self, dropped_text: str) -> str:
@@ -846,8 +865,12 @@ class PromptEvalApp(App):
                 "num_predict": g.num_predict,
             },
         }
-        resp = await self.client.post(url, json=payload)
-        resp.raise_for_status()
+        try:
+            resp = await self.client.post(url, json=payload, timeout=30.0)
+            resp.raise_for_status()
+        except httpx.HTTPError as e:
+            await self._status(f"Generator HTTP error: {e!s}")
+            raise
         data = resp.json()
         return data.get("response", "").strip()
 
