@@ -47,70 +47,62 @@ import httpx
 from rich.pretty import Pretty
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, VerticalScroll
+from textual.containers import Container, Horizontal, VerticalScroll, HorizontalGroup
 from textual.message import Message
 from textual.widgets import Footer, Header, Input, Label, Static, Log, RichLog, TextArea
 
-# NEW: a small modal screen for single/multi-line input
-from textual.screen import ModalScreen
-from textual.widgets import Button, TextArea, Input, Label
-from textual.containers import Container, Horizontal
+from textual.widgets import Button, TextArea, Label
+from textual.widget import Widget
+from textual.message import Message
 
-class PromptEditor(ModalScreen[Optional[str]]):
+class InlineEditor(Static):
     BINDINGS = [
-        ("escape", "cancel", "Cancel"),
         ("ctrl+s", "save", "Save"),
+        ("escape", "cancel", "Cancel"),
     ]
-    def __init__(self, title: str, initial: str = "", multiline: bool = True) -> None:
-        super().__init__()
-        self.title_text = title
-        self.initial = initial
-        self.multiline = multiline
-        self._input: Optional[Input] = None
-        self._area: Optional[TextArea] = None
 
-    def action_cancel(self) -> None:
-        self.dismiss(None)
+    class Saved(Message):
+        def __init__(self, sender: Widget, text: str) -> None:
+            super().__init__()
+            self.text = text
 
-    def action_save(self) -> None:
-        if self.multiline and self._area:
-            self.dismiss(self._area.text)
-        elif self._input:
-            self.dismiss(self._input.value)
+    class Cancelled(Message):
+        pass
+
+    def __init__(self, initial: str = '', title: str = '') -> None:
+        super().__init__(classes="editor hidden")
+        if title == '':
+            self._title = "Edit prompt (Ctrl+S to save, Esc to cancel)"
         else:
-            self.dismiss("")
+            self._title = title
+        self._initial = initial
+        self._area: TextArea | None = None
 
     def compose(self):
-        with Container(id="box"):
-            yield Label(self.title_text)
-            if self.multiline:
-                self._area = TextArea()
-                yield self._area
-            else:
-                self._input = Input(self.initial)
-                yield self._input
-            with Horizontal():
-                yield Button("Save", id="save", variant="primary")
-                yield Button("Cancel", id="cancel")
+        yield Label(self._title, classes="editor-title")
+        self._area = TextArea()
+        yield self._area
+        with HorizontalGroup():
+            yield Button("Save", id="save", variant="primary")
+            yield Button("Cancel", id="cancel")
 
     def on_mount(self):
-        if self.multiline and self._area:
-            self._area.text = self.initial
+        if self._area:
+            self._area.text = self._initial
             self._area.focus()
-        elif self._input:
-            self._input.value = self.initial
-            self._input.focus()
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+
+    def action_save(self):
+        self.post_message(self.Saved(self, self._area.text if self._area else ""))
+
+    def action_cancel(self):
+        self.post_message(self.Cancelled())
+
+    def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "save":
-            if self.multiline and self._area:
-                self.dismiss(self._area.text)
-            elif self._input:
-                self.dismiss(self._input.value)
-            else:
-                self.dismiss("")
+            self.action_save()
         else:
-            self.dismiss(None)
+            self.action_cancel()
 
 SAVE_DIR = Path(os.path.expanduser("~/.prompt-test-saves"))
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
@@ -159,14 +151,14 @@ class PromptSlot:
 
 @dataclass
 class RunSettings:
-    model: str = "gpt-oss"
+    model: str = 'gemma3:270m'
     temperature: float = 0.0
     top_p: float = 1.0
     top_k: int = 0
     repeat_penalty: float = 1.0
     presence_penalty: float = 0.0
     frequency_penalty: float = 0.0
-    num_ctx: int = 8192          # default context length
+    num_ctx: int = 2048          # default context length
     num_predict: int = 1024      # default max tokens to generate per output
     seed: int = 42
     base_url: str = "http://localhost:11434"  # Ollama
@@ -174,7 +166,7 @@ class RunSettings:
 @dataclass
 class GeneratorSettings:
     # For "Generate alternative" only (non-deterministic, separate from evaluation runs)
-    model: str = "gpt-oss"
+    model: str = 'gemma3:270m'
     temperature: float = 0.7
     top_p: float = 0.95
     num_ctx: int = 8192
@@ -238,6 +230,33 @@ class RunState:
 # UI widgets
 # -------------------------------
 
+class Hints(Static):
+    def __init__(self, state: RunState) -> None:
+        super().__init__()
+        self.state = state
+
+    def compose(self) -> ComposeResult:
+        yield Label(
+            "\nHints: \n• '1e/2e/3e' edit \n• '1d/2d/3d' drop \n• '1g/2g/3g' alt \n• r run \n• n new \n• m globals \n• s save \n• o open \n• q quit",
+            classes="hints")
+
+
+class Logs(Static):
+    def __init__(self, state: RunState) -> None:
+        super().__init__()
+        self.state = state
+        self.status_log: Optional[RichLog] = None
+
+    def compose(self) -> ComposeResult:
+        yield Label("\nStatus", classes="side-title")
+        self.status_log = RichLog(id="status-log")
+        yield self.status_log
+
+    def post_status(self, msg: str) -> None:
+        if self.status_log is not None:
+            self.status_log.write(msg)
+
+
 class HeaderBar(Static):
     """Compact header showing globals & stage."""
 
@@ -245,6 +264,8 @@ class HeaderBar(Static):
         super().__init__()
 
         self.state = state
+
+        self.status_log: Optional[RichLog] = None
 
     def refresh_bar(self) -> None:
         """Recompute and update the header content."""
@@ -281,13 +302,46 @@ class PromptPanel(Static):
         self.slot = slot
         self.prompt_label = Label("", id=f"prompt-label-{slot.slot_id}")
         self.prompt_text = RichLog(id=f"prompt-text-{slot.slot_id}", highlight=False)
-        self.output_log = RichLog(id=f"output-log-{slot.slot_id}", highlight=False)
+        self.output_log = RichLog(id=f"output-log-{slot.slot_id}", highlight=False, wrap=True, min_width=40)
+        self.editor: InlineEditor | None = None
+        self.line = ''
 
     def compose(self) -> ComposeResult:
+        # editor overlays on top of the panel when visible
+        self.editor = InlineEditor(self.slot.text)
+        yield self.editor
+
         yield Label(f"Prompt {self.slot.slot_id}", classes="title")
         yield self.prompt_text
         yield Label("Output", classes="title")
         yield self.output_log
+
+    # Public API for the app to open editor on this panel
+    def open_editor(self):
+        assert self.editor is not None
+        # seed editor with current text and show it
+        self.editor.remove_class("hidden")
+        if self.editor._area:
+            self.editor._area.text = "" if self.slot.empty else self.slot.text
+            self.editor._area.focus()
+
+    def close_editor(self):
+        if self.editor:
+            self.editor.add_class("hidden")
+
+
+    def on_inline_editor_saved(self, msg: InlineEditor.Saved):
+        text = (msg.text or "").strip()
+        self.slot.text = text
+        self.slot.empty = (text == "")
+        self.slot.active = not self.slot.empty
+        self.refresh_prompt()
+        self.close_editor()
+        # tell siblings (side panel / header) to refresh
+        self.post_message(self.Edited(self.slot.slot_id, text))
+
+    def on_inline_editor_cancelled(self, _msg: InlineEditor.Cancelled):
+        self.close_editor()
 
     def refresh_prompt(self) -> None:
         self.prompt_text.clear()
@@ -300,7 +354,13 @@ class PromptPanel(Static):
         self.output_log.clear()
 
     def append_output(self, text: str) -> None:
-        self.output_log.write(text)
+        lines = text.splitlines()
+        if len(lines) > 1:
+            self.line += lines[0]
+            self.output_log.write(self.line)
+            self.line = lines[1]
+        else:
+            self.line += lines[0]
 
     def replace_output(self, text: str) -> None:
         self.output_log.clear()
@@ -314,7 +374,6 @@ class SidePanel(VerticalScroll):
         super().__init__()
         self.state = state
         self.labels: Dict[int, Label] = {}
-        self.status_log: Optional[RichLog] = None
 
     def compose(self) -> ComposeResult:
         yield Label("Prompts & Scores", classes="side-title")
@@ -322,77 +381,21 @@ class SidePanel(VerticalScroll):
             lbl = Label("", id=f"score-{s.slot_id}")
             self.labels[s.slot_id] = lbl
             yield lbl
-        yield Label("\nHints: \n• '1e/2e/3e' edit \n• '1d/2d/3d' drop \n• '1g/2g/3g' alt \n• r run \n• n new \n• m globals \n• s save \n• o open \n• q quit", classes="hints")
-        yield Label("\nStatus", classes="side-title")
-        self.status_log = RichLog(id="status-log")
-        yield self.status_log
+        # yield Label("\nHints: \n• '1e/2e/3e' edit \n• '1d/2d/3d' drop \n• '1g/2g/3g' alt \n• r run \n• n new \n• m globals \n• s save \n• o open \n• q quit", classes="hints")
+        # yield Label("\nStatus", classes="side-title")
+        # self.status_log = RichLog(id="status-log")
+        # yield self.status_log
 
     def update_panel(self) -> None:
 
         for s in self.state.slots:
-            status = "EMPTY" if s.empty else ("DROPPED" if s.dropped else "ACTIVE")
+            status = "-" if s.empty else ("x" if s.dropped else "+")
             score = s.current_score(self.state.stage)
             text = f"[{s.slot_id}] {status}  score={score:.4f}"
             if not s.empty and not s.dropped:
                 text += f"  born@{s.born_stage}  survived={s.has_survived}"
             self.labels[s.slot_id].update(text)
 
-    def post_status(self, msg: str) -> None:
-        if self.status_log is not None:
-            self.status_log.write(msg)
-
-class ModalInput(App):
-    """Simple modal prompt editor—spawned as a sub-App (blocking)."""
-
-    CSS = """
-    Screen { align: center middle; }
-    #box { width: 90%; height: 80%; border: solid $accent; padding: 1 2; }
-    Input { width: 100%; }
-    TextArea { height: 1fr; }
-    """
-
-    def __init__(self, title: str, initial: str = "", multiline: bool = True) -> None:
-        super().__init__()
-        self.title_text = title
-        self.initial = initial
-        self.multiline = multiline
-        self.result: Optional[str] = None
-        self.input_widget: Optional[Input] = None
-        self.editor = TextArea()
-
-
-    def compose(self) -> ComposeResult:
-        with Container(id="box"):
-            yield Label(self.title_text)
-            if self.multiline:
-                self.editor = TextArea()
-                yield self.editor
-            else:
-                self.input_widget = Input(self.initial)
-                yield self.input_widget
-            yield Label("Press Ctrl+S to save, Esc to cancel.")
-
-    def on_mount(self) -> None:
-        if self.multiline and self.editor:
-                self.editor.text = self.initial
-        elif self.input_widget:
-            self.input_widget.value = self.initial
-
-    BINDINGS = [
-        Binding("ctrl+s", "save", "Save"),
-        Binding("escape", "cancel", "Cancel"),
-    ]
-
-    def action_save(self) -> None:
-        if self.multiline and self.editor:
-            self.result = self.editor.text
-        elif self.input_widget:
-            self.result = self.input_widget.value
-        self.exit()
-
-    def action_cancel(self) -> None:
-        self.result = None
-        self.exit()
 
 # -------------------------------
 # Core App
@@ -403,14 +406,33 @@ class PromptEvalApp(App):
     Screen {
         layout: grid;
         grid-size: 4 2;
-        grid-rows: auto 1fr;
-        grid-columns: 28 1fr 1fr 1fr;
+        grid-rows: 13 1fr;
+        grid-columns: 22 1fr 1fr 1fr;
     }
     .title { content-align: left middle; padding: 0 1; }
-    .side-title { padding: 1 1; }
-    #side   { row-span: 2; border: tall $accent; }
-    #header { column-span: 3; border: tall $accent; }
-    #col1, #col2, #col3 { border: round $primary; }
+    .side-title { padding: 0 1; }
+    #side    { row-span: 1; border: round darkslategrey; }
+    #header  { column-span: 1; border: round darkslategrey; }
+    #hints   { padding: 0 1; column-span: 1; border: round darkslategrey; }
+    #logs    { column-span: 2; border: round darkslategrey; }
+    
+    /* Make each column a stacking context and allow an overlay */
+    #col1, #col2, #col3 { 
+        position: relative; 
+        border: round darkslategrey;
+    }
+
+    .editor {
+        layer: overlay;        /* render above normal content */
+        dock: top;
+        height: 30;
+        # padding: 0 1;
+        border: round darkslategrey;
+        background: $boost;    /* subtle elevated background */
+    }
+
+    .editor-title { padding: 0 1; }
+    .hidden { display: none; }
     RichLog { height: 1fr; }
     #status-log { height: 10; }  /* optional: give status a compact fixed height */
     """
@@ -427,8 +449,11 @@ class PromptEvalApp(App):
     def __init__(self) -> None:
         super().__init__()
         self.state = self._new_run_state()
+        self.state.slots[0].text = 'What is the capital of France?'
         self.header_bar = HeaderBar(self.state)
         self.side_panel = SidePanel(self.state)
+        self.hints_panel = Hints(self.state)
+        self.logs_panel = Logs(self.state)
         self.panels: Dict[int, PromptPanel] = {}
         self.combo_buffer: Optional[int] = None
         self.combo_ts: float = 0.0
@@ -453,6 +478,10 @@ class PromptEvalApp(App):
         yield self.side_panel  # (1,1) spanning two rows
         self.header_bar.id = "header"
         yield self.header_bar  # (1,2) spanning 3 columns
+        self.logs_panel.id = "logs"
+        yield self.logs_panel  # (1,2) spanning 3 columns
+        self.hints_panel.id = "hints"
+        yield self.hints_panel  # (1,2) spanning 3 columns
         # Three prompt columns on row 2, columns 2..4
         for i in range(1, 4):
             panel = PromptPanel(self.state.slots[i - 1])
@@ -469,6 +498,15 @@ class PromptEvalApp(App):
         if self.client:
             await self.client.aclose()
 
+    def on_prompt_panel_edited(self, msg: PromptPanel.Edited) -> None:
+        # Called when a panel saved changes; refresh side & header
+        self.side_panel.update_panel()
+        self.header_bar.refresh_bar()
+
+    async def _prompt_multiline(self, title: str = '', initial: str = "") -> Optional[str]:
+        editor = InlineEditor(initial, title='Edit globals')
+        # Must be called from a worker:
+        return await self.push_screen_wait(editor._area.text)
     # -------------- UI updates
 
     def refresh_all(self) -> None:
@@ -484,10 +522,6 @@ class PromptEvalApp(App):
     async def on_key(self, event) -> None:
         key = event.key
         now = time.time()
-
-        if key == "r":
-            await self.action_run_all()
-            return
 
         if key in ("1", "2", "3"):
             self.combo_buffer = int(key)
@@ -505,8 +539,11 @@ class PromptEvalApp(App):
             if key == "g":
                 await self._generate_alternative(slot); return
             if key == "n":
-                self.run_worker(self._add_new_in_slot(slot), exclusive=True)
-                return
+                s = self.state.slots[slot - 1]
+                if not s.empty:
+                    await self._status(f"Slot {slot} not empty. Drop first with '{slot}d'.")
+                    return
+                await self._edit_prompt(slot); return
         # fall through to normal single-key bindings
 
     # -------------- Actions
@@ -533,7 +570,13 @@ class PromptEvalApp(App):
         if idx is None:
             await self._status("No empty slot. Drop one first with 'Xd'.")
             return
-        self.run_worker(self._add_new_any_empty(), exclusive=True)
+
+        idx = next((i for i, s in enumerate(self.state.slots) if s.empty), None)
+        if idx is None:
+            await self._status("No empty slot. Drop one first with 'Xd'.")
+            return
+        slot = idx + 1
+        self.run_worker(self._edit_prompt(slot), exclusive=True)
 
     async def action_edit_globals(self) -> None:
         # Simple inline JSON editor of globals
@@ -593,6 +636,8 @@ class PromptEvalApp(App):
             # Re-bind UI
             self.header_bar.state = self.state
             self.side_panel.state = self.state
+            self.hints_panel.state = self.state
+            self.logs_panel.state = self.state
             for i in range(3):
                 self.panels[i+1].slot = self.state.slots[i]
             self.refresh_all()
@@ -639,28 +684,11 @@ class PromptEvalApp(App):
         self.panels[slot].refresh_prompt()
         self.side_panel.update_panel()
 
-    async def _add_new_any_empty(self) -> None:
-        idx = next((i for i, s in enumerate(self.state.slots) if s.empty), None)
-        if idx is None:
-            await self._status("No empty slot. Drop one first with 'Xd'.")
-            return
-        slot = idx + 1
-        await self._add_new_in_slot(slot)
-
-    async def _prompt_multiline(self, title: str, initial: str = "") -> Optional[str]:
-        screen = PromptEditor(title, initial, multiline=True)
-        # Must be called from a worker:
-        return await self.push_screen_wait(screen)
-
-    async def _prompt_line(self, title: str, initial: str = "") -> Optional[str]:
-        screen = PromptEditor(title, initial, multiline=False)
-        return await self.push_screen_wait(screen)
-
     async def _status(self, msg: str) -> None:
         """Write status to the side panel and to a log file."""
         # On-screen
         try:
-            self.side_panel.post_status(msg)
+            self.logs_panel.post_status(msg)
         except Exception:
             pass
         # File log
@@ -671,20 +699,8 @@ class PromptEvalApp(App):
             pass
 
     async def _edit_prompt(self, slot_id: int) -> None:
-        slot = self.state.slots[slot_id-1]
-        if slot.dropped:
-            await self._status("This slot is dropped. Add or generate a new prompt.")
-            return
-        initial = "" if slot.empty else slot.text
-        text = await self._prompt_multiline(f"Edit Prompt {slot_id}", initial)
-        if text is None:
-            return
-        slot.text = text.strip()
-        slot.empty = (slot.text.strip() == "")
-        slot.active = not slot.empty
-        self.panels[slot_id].slot = slot
-        self.panels[slot_id].refresh_prompt()
-        self.side_panel.update_panel()
+        panel = self.panels[slot_id]
+        panel.open_editor()
 
     async def _drop_slot(self, slot_id: int) -> None:
         slot = self.state.slots[slot_id-1]
@@ -715,9 +731,9 @@ class PromptEvalApp(App):
     async def _generate_alternative(self, slot_id: int) -> None:
         slot = self.state.slots[slot_id-1]
         if not slot.empty:
-            await self._status(f"Slot {slot} not empty. Drop first with '{slot}d'.")
-            return
+            await self._drop_slot(slot_id)
         base_text = slot.last_dropped_text or ""
+        await self._status(f'Slot dropped {slot_id} with prompt {slot.last_dropped_text[:30]} ..')
         if not base_text.strip():
             await self._status(f"Slot {slot_id} has no dropped prompt to rewrite. Drop here first with '{slot_id}d'.")
             return
@@ -751,6 +767,7 @@ class PromptEvalApp(App):
                     continue
                 panel.append_output(chunk)
                 slot.last_output += chunk
+            panel.append_output('\n\n')
             # end-of-stream: record stats are attached via last meta
         except Exception as e:
             panel.append_output(f"\n[ERROR] {e}")
@@ -820,6 +837,7 @@ class PromptEvalApp(App):
             # Fallback: ask Ollama directly with a non-deterministic call
             return await self._rewrite_prompt_fallback(dropped_text)
 
+        await self._status('rewriting using llama_index...')
         g = self.state.gen_settings
         llm = Ollama(
             model=g.model,
@@ -833,18 +851,18 @@ class PromptEvalApp(App):
             },
         )
         system = (
-            "You rewrite prompts for A/B testing of wording only. "
+            'You are a automatic, technical copy-writer for LLM prompts.'
             "Rewrite the provided prompt into a clear, distinct alternative for the SAME task. "
-            "Do not add new capabilities, tool calls, or constraints. Keep it roughly same length. "
-            "Return ONLY the rewritten prompt text—no commentary."
+            "Respond using ONLY the rewritten prompt."
         )
-        user = f"Original prompt:\n---\n{dropped_text}\n---\nRewrite it."
+        user = f"Reword this prompt improving its format for more specific LLM runs:\n{dropped_text}"
         resp = await llm.acomplete(system_prompt=system, prompt=user)
         text = getattr(resp, "text", None) or str(resp)
         return text.strip()
 
     async def _rewrite_prompt_fallback(self, dropped_text: str) -> str:
         # Non-deterministic generator via direct Ollama; higher temp
+        await self._status("Using fallback generator...")
         g = self.state.gen_settings
         s = self.state.settings
         url = f"{s.base_url.rstrip('/')}/api/generate"
